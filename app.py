@@ -17,7 +17,7 @@ from flask_wtf import Form
 from forms import *
 from datetime import datetime
 from flask_migrate import Migrate
-
+from models import db, Venue, Artist, Show
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
@@ -25,71 +25,10 @@ from flask_migrate import Migrate
 app = Flask(__name__)
 moment = Moment(app)
 app.config.from_object('config')
-db = SQLAlchemy(app)
+
+db.init_app(app)
 migrate = Migrate(app, db)
 
-#----------------------------------------------------------------------------#
-# Models.
-#----------------------------------------------------------------------------#
-
-class Venue(db.Model):
-    __tablename__ = 'Venue'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    address = db.Column(db.String(120))
-    phone = db.Column(db.String(120))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(120))
-    genres = db.Column(db.ARRAY(db.String))
-    website = db.Column(db.String(120))
-    seeking_talent = db.Column(db.Boolean, default=False, nullable=False)
-    seeking_description = db.Column(db.String)
-    shows = db.relationship(
-      'Show', backref=db.backref('venue', lazy=True)
-    )
-
-    # TODO: implement any missing fields, as a database migration using Flask-Migrate
-
-class Artist(db.Model):
-    __tablename__ = 'Artist'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    phone = db.Column(db.String(120))
-    genres = db.Column(db.ARRAY(db.String))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(120))
-    website = db.Column(db.String(120))
-    seeking_description = db.Column(db.String)
-    seeking_venue = db.Column(db.Boolean, default=False, nullable=False)
-    shows = db.relationship(
-      'Show', backref=db.backref('artist', lazy=True)
-    )
-
-    # TODO: implement any missing fields, as a database migration using Flask-Migrate
-
-# TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
-class Show(db.Model):
-  __tablename__ = 'Show'
-  artist_id = db.Column(
-    db.Integer, 
-    db.ForeignKey('Artist.id'), 
-    primary_key=True
-  )
-  venue_id = db.Column(
-    db.Integer,
-    db.ForeignKey('Venue.id'),
-    primary_key=True
-  )
-  start_time = db.Column(db.String, nullable=False)
-
-  def __repr__(self) -> str:
-    return f'<Show {self.artist_id} {self.venue_id} {self.start_time}>'
 
 #----------------------------------------------------------------------------#
 # Filters.
@@ -121,6 +60,16 @@ def index():
 def venues():
   # TODO: replace with real venues data.
   #       num_upcoming_shows should be aggregated based on number of upcoming shows per venue.
+  # data=[{
+  #   "city": "San Francisco",
+  #   "state": "CA",
+  #   "venues": [{
+  #     "id": 3,
+  #     "name": "Park Square Live Music & Coffee",
+  #     "num_upcoming_shows": 1,
+  #   }]
+  # }]
+  
   data = Venue.query.distinct(Venue.city, Venue.state) \
     .with_entities(Venue.city, Venue.state) \
     .all()
@@ -131,6 +80,8 @@ def venues():
     venues = Venue.query \
       .filter_by(state=datum.state, city=datum.city) \
       .all()
+
+    # flash(venues)
 
     for venue in venues:
       venue.num_upcoming_shows = Show.query \
@@ -157,9 +108,11 @@ def search_venues():
   count = Venue.query.filter(Venue.name.ilike(query)).count()
 
   for venue in data:
-    venue.num_upcoming_shows = Show.query \
-    .filter_by(venue_id = venue.id)\
-    .count()
+    venue.upcoming_shows = Show.query \
+    .filter_by(venue_id = venue.id) \
+    .all()
+
+    venue.num_upcoming_shows = len(venue.upcoming_shows)
 
   response={
     "count": count,
@@ -200,61 +153,6 @@ def show_venue(venue_id):
     "past_shows_count": 1,
     "upcoming_shows_count": 0,
   }
-  data2={
-    "id": 2,
-    "name": "The Dueling Pianos Bar",
-    "genres": ["Classical", "R&B", "Hip-Hop"],
-    "address": "335 Delancey Street",
-    "city": "New York",
-    "state": "NY",
-    "phone": "914-003-1132",
-    "website": "https://www.theduelingpianos.com",
-    "facebook_link": "https://www.facebook.com/theduelingpianos",
-    "seeking_talent": False,
-    "image_link": "https://images.unsplash.com/photo-1497032205916-ac775f0649ae?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=750&q=80",
-    "past_shows": [],
-    "upcoming_shows": [],
-    "past_shows_count": 0,
-    "upcoming_shows_count": 0,
-  }
-  data3={
-    "id": 3,
-    "name": "Park Square Live Music & Coffee",
-    "genres": ["Rock n Roll", "Jazz", "Classical", "Folk"],
-    "address": "34 Whiskey Moore Ave",
-    "city": "San Francisco",
-    "state": "CA",
-    "phone": "415-000-1234",
-    "website": "https://www.parksquarelivemusicandcoffee.com",
-    "facebook_link": "https://www.facebook.com/ParkSquareLiveMusicAndCoffee",
-    "seeking_talent": False,
-    "image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
-    "past_shows": [{
-      "artist_id": 5,
-      "artist_name": "Matt Quevedo",
-      "artist_image_link": "https://images.unsplash.com/photo-1495223153807-b916f75de8c5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=334&q=80",
-      "start_time": "2019-06-15T23:00:00.000Z"
-    }],
-    "upcoming_shows": [{
-      "artist_id": 6,
-      "artist_name": "The Wild Sax Band",
-      "artist_image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-      "start_time": "2035-04-01T20:00:00.000Z"
-    }, {
-      "artist_id": 6,
-      "artist_name": "The Wild Sax Band",
-      "artist_image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-      "start_time": "2035-04-08T20:00:00.000Z"
-    }, {
-      "artist_id": 6,
-      "artist_name": "The Wild Sax Band",
-      "artist_image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-      "start_time": "2035-04-15T20:00:00.000Z"
-    }],
-    "past_shows_count": 1,
-    "upcoming_shows_count": 1,
-  }
-  # data = list(filter(lambda d: d['id'] == venue_id, [data1, data2, data3]))[0]
 
   today = datetime.now()
   venue = Venue.query.filter_by(id = venue_id).first()
@@ -294,6 +192,11 @@ def create_venue_form():
 def create_venue_submission():
   # TODO: insert form data as a new Venue record in the db, instead
   try:
+    form = VenueForm(request.form)
+
+    if(form.validate() == False):
+      raise Exception()
+
     venue = Venue(
       name=request.form.get('name'),
       city=request.form.get('city'),
@@ -354,6 +257,11 @@ def delete_venue(venue_id):
 @app.route('/artists')
 def artists():
   # TODO: replace with real data returned from querying the database
+  # data=[{
+  #   "id": 4,
+  #   "name": "Guns N Petals",
+  # }]
+
   data = Artist.query.all()
   return render_template('pages/artists.html', artists=data)
 
@@ -462,6 +370,11 @@ def edit_artist_submission(artist_id):
   # TODO: take values from the form submitted, and update existing
   # artist record with ID <artist_id> using the new attributes
   try:
+    form = ArtistForm(request.form)
+
+    if(form.validate() == False):
+      raise Exception()
+
     artist = Artist.query.filter_by(id = artist_id).first()
 
     artist.name = request.form.get('name')
@@ -495,7 +408,7 @@ def edit_artist_submission(artist_id):
 def edit_venue(venue_id):
   # TODO: populate form with values from venue with ID <venue_id>
   venue = Venue.query.filter_by(id = venue_id).first()
-  print(venue)
+
   form = VenueForm(
     name = venue.name,
     city = venue.city,
@@ -516,7 +429,13 @@ def edit_venue(venue_id):
 def edit_venue_submission(venue_id):
   # TODO: take values from the form submitted, and update existing
   # venue record with ID <venue_id> using the new attributes
+
   try:
+    form = VenueForm(request.form)
+
+    if(form.validate() == False):
+      raise Exception()
+
     venue = Venue.query.filter_by(id = venue_id).first()
 
     venue.name = request.form.get('name')
@@ -525,10 +444,14 @@ def edit_venue_submission(venue_id):
     venue.phone = request.form.get('phone')
     venue.genres = request.form.get('genres')
     venue.address=request.form.get('address'),
-    venue.website = request.form.get('website_link') or venue.website
-    venue.image_link = request.form.get('image_link') or venue.image_link
-    venue.facebook_link = request.form.get('facebook_link') or venue.facebook_link
-    venue.seeking_description = request.form.get('seeking_description') or venue.seeking_description
+    venue.website = request.form.get('website_link') \
+      or venue.website
+    venue.image_link = request.form.get('image_link') \
+      or venue.image_link
+    venue.facebook_link = request.form.get('facebook_link') \
+      or venue.facebook_link
+    venue.seeking_description = request.form.get('seeking_description') \
+      or venue.seeking_description
     venue.seeking_talent = False
 
     if(request.form.get('seeking_talent') == 'y'):
@@ -558,6 +481,11 @@ def create_artist_submission():
   # TODO: modify data to be the data object returned from db insertion
 
   try:
+    form = ArtistForm(request.form)
+
+    if(form.validate() == False):
+      raise Exception()
+
     artist = Artist(
       name=request.form.get('name'),
       city=request.form.get('city'),
@@ -627,6 +555,11 @@ def create_show_submission():
   # called to create new shows in the db, upon submitting new show listing form
   # TODO: insert form data as a new Show record in the db, instead
   try:
+    form = ShowForm(request.form)
+
+    if(form.validate() == False):
+      raise Exception()    
+
     show = Show(
       venue_id = request.form.get('venue_id'),
       artist_id = request.form.get('artist_id'),
